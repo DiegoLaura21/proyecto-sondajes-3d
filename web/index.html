@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Visor local de sondajes 3D para geología de exploración.">
+  <title>Traza 3D · Visor de sondajes</title>
+  <link rel="icon" href="/marca.svg">
+  <link rel="stylesheet" href="/estilo.css">
+  <script src="/gl.js" defer></script>
+  <script src="/visor.js" defer></script>
+</head>
+<body>
+  <header class="cabecera">
+    <div class="marca"><img src="/marca.svg" alt="" width="38" height="38"><div><strong>Traza 3D</strong><span>Visor de sondajes</span></div></div>
+    <label class="proyecto-selector"><span>Proyecto</span><select id="proyectos" aria-label="Proyecto activo"><option value="demo">Pórfido Alto Horizonte</option><option value="carga">Escena de carga · 1.500 taladros</option></select></label>
+    <nav aria-label="Archivos de proyecto"><button id="guardar" class="secundario" type="button" disabled>Guardar proyecto</button><button id="importar" class="principal" type="button"><span aria-hidden="true">＋</span> Importar proyecto</button></nav>
+  </header>
+  <main class="aplicacion">
+    <aside class="panel" aria-label="Controles del visor">
+      <section class="bloque">
+        <h2>Capas</h2>
+        <p class="etiqueta">Color de los taladros</p>
+        <div id="capas" class="capas" role="group" aria-label="Color de los taladros">
+          <button type="button" data-capa="assay" aria-pressed="true"><i class="punto ensayo"></i>Ensayes</button>
+          <button type="button" data-capa="lith" aria-pressed="false"><i class="punto lito"></i>Litología</button>
+          <button type="button" data-capa="alt" aria-pressed="false"><i class="punto alter"></i>Alteración</button>
+          <button type="button" data-capa="extra" aria-pressed="false"><i class="punto atributo"></i>Atributos</button>
+          <button type="button" data-capa="trace" aria-pressed="false"><i class="punto traza"></i>Trayectoria</button>
+        </div>
+        <label id="fila-analito" class="campo"><span>Analito</span><select id="analitos" aria-label="Analito"></select></label>
+        <label id="fila-atributo" class="campo" hidden><span>Atributo</span><select id="atributos" aria-label="Atributo"></select></label>
+        <div class="linea"></div>
+        <label class="check"><input id="topografia" type="checkbox" checked> Topografía</label>
+        <label class="check"><input id="collares" type="checkbox" checked> Collares</label>
+        <label class="check"><input id="grilla" type="checkbox" checked> Grilla de referencia</label>
+        <label id="fila-opacidad" class="campo opacidad"><span>Opacidad del terreno <output id="valor-opacidad">30%</output></span><input id="opacidad" type="range" min="5" max="85" value="30" aria-label="Opacidad del terreno"></label>
+      </section>
+      <section class="bloque">
+        <h2>Taladros</h2>
+        <form id="buscar" class="busqueda"><label class="sr-only" for="buscar-id">ID de taladro</label><input id="buscar-id" type="search" placeholder="ID del taladro" autocomplete="off" list="lista-taladros"><datalist id="lista-taladros"></datalist><button type="submit" class="icono" title="Buscar y enfocar" aria-label="Buscar y enfocar taladro">↗</button></form>
+        <p id="busqueda-error" class="error pequena" hidden></p>
+        <p class="ayuda">También puedes seleccionar un tramo directamente en la escena.</p>
+      </section>
+      <section class="bloque rendimiento">
+        <h2>Rendimiento</h2>
+        <label class="campo"><span>Resolución de escena</span><select id="calidad"><option value="auto">Adaptable</option><option value="ligera">Ligera</option><option value="alta">Alta</option></select></label>
+        <button id="medir" type="button" class="secundario ancho" disabled>Medir FPS en órbita</button>
+        <p id="resultado-medicion" class="ayuda" aria-live="polite"></p>
+      </section>
+    </aside>
+    <section id="escena" class="escena" aria-label="Escena 3D">
+      <canvas id="lienzo" aria-label="Taladros y topografía en 3D" tabindex="0"></canvas>
+      <div class="encabezado-escena">
+        <div><div id="origen-escena" class="sobrelinea">Caso sintético</div><h1 id="titulo-escena">Pórfido Alto Horizonte</h1>
+        <div class="cifras"><span><strong id="n-taladros">—</strong> taladros</span><span><strong id="n-metros">—</strong> m perforados</span><span><strong id="n-tramos">—</strong> tramos</span></div></div>
+        <div id="vistas" class="vistas" role="group" aria-label="Vistas predefinidas"><button type="button" data-vista="iso" aria-pressed="true">3D</button><button type="button" data-vista="planta" aria-pressed="false">Planta</button><button type="button" data-vista="norte" aria-pressed="false">Norte</button><button type="button" data-vista="este" aria-pressed="false">Este</button><button type="button" id="encuadrar" aria-label="Encuadrar proyecto" title="Encuadrar proyecto">⌗</button></div>
+      </div>
+      <div id="leyenda" class="leyenda" aria-label="Leyenda de colores"></div>
+      <div class="esquina"><svg id="brujula" width="84" height="72" viewBox="0 0 84 72" role="img" aria-label="Orientación de este, norte y cota"></svg><div class="escala"><span id="escala-valor"></span><i id="escala-linea"></i></div></div>
+      <aside id="inspector" class="inspector" aria-label="Detalle del tramo seleccionado" hidden>
+        <header><div><span class="sobrelinea">Tramo seleccionado</span><h2 id="detalle-id"></h2></div><button id="cerrar-detalle" type="button" class="icono" aria-label="Cerrar detalle">×</button></header>
+        <dl id="detalle"></dl>
+        <details id="otros-atributos" hidden><summary>Otros atributos</summary><dl id="detalle-atributos"></dl></details>
+        <button id="enfocar" type="button" class="secundario ancho">Enfocar taladro</button>
+      </aside>
+      <div id="mensaje" class="mensaje" role="status">Cargando caso sintético…</div>
+      <div class="atajos"><span>Arrastra para orbitar</span><span>Shift + arrastre para desplazar</span><span>Rueda para acercar</span></div>
+    </section>
+  </main>
+  <footer class="pie"><span id="estado"><i class="punto ensayo"></i> Procesando geometría</span><button id="advertencias" type="button" hidden></button><span id="metricas">WebGL 2</span></footer>
+  <dialog id="dialogo">
+    <form id="form-importar">
+      <div class="modal-encabezado"><div><h2>Importar proyecto</h2><p>Carga un proyecto guardado o agrega sus tablas CSV.</p></div><button class="icono" id="cerrar-importar" type="button" aria-label="Cerrar importación">×</button></div>
+      <label class="campo json-entrada"><span>Proyecto guardado (.json)</span><input type="file" id="paquete" accept=".json,application/json"></label>
+      <div class="linea"></div>
+      <label class="campo"><span>Nombre del proyecto</span><input id="nombre" type="text" maxlength="100" placeholder="Nombre de la campaña"></label>
+      <div class="archivos">
+        <label class="campo"><span>Collar <small>obligatorio</small></span><input type="file" data-archivo="collar" accept=".csv,.tsv,.txt"></label>
+        <label class="campo"><span>Survey <small>obligatorio</small></span><input type="file" data-archivo="survey" accept=".csv,.tsv,.txt"></label>
+        <label class="campo"><span>Assay <small>obligatorio</small></span><input type="file" data-archivo="assay" accept=".csv,.tsv,.txt"></label>
+        <label class="campo"><span>Litología <small>opcional</small></span><input type="file" data-archivo="lith" accept=".csv,.tsv,.txt"></label>
+        <label class="campo"><span>Alteración <small>opcional</small></span><input type="file" data-archivo="alt" accept=".csv,.tsv,.txt"></label>
+        <label class="campo"><span>Topografía <small>GeoTIFF, ASC, CSV u OBJ</small></span><input type="file" data-archivo="topo" accept=".tif,.tiff,.asc,.csv,.obj,.txt"></label>
+        <label class="campo campo-completo"><span>Atributos por intervalo <small>uno o varios CSV</small></span><input type="file" id="archivos-atributos" multiple accept=".csv,.tsv,.txt"></label>
+      </div>
+      <p class="ayuda">Usa un DEM de elevación y el mismo sistema de coordenadas y cotas de Collar. El dip descendente se escribe con signo negativo. Cada CSV de atributos empieza con HoleID, From y To.</p>
+      <p id="error-importar" class="error" role="alert" hidden></p>
+      <div class="modal-pie"><button type="button" class="secundario" id="plantilla">Descargar ejemplo JSON</button><button type="submit" class="principal" id="procesar">Cargar proyecto</button></div>
+    </form>
+  </dialog>
+  <dialog id="dialogo-advertencias"><div class="modal-encabezado"><h2>Advertencias de importación</h2><button id="cerrar-advertencias" class="icono" type="button" aria-label="Cerrar advertencias">×</button></div><ul id="lista-advertencias"></ul></dialog>
+</body>
+</html>
+
